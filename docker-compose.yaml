@@ -1,0 +1,83 @@
+---
+version: '3.9'
+services:
+  producer:
+    build: ./mux-sarama-producer
+    container_name: producer
+    labels:
+      com.datadoghq.tags.env: test
+      com.datadoghq.tags.service: mux-sarama-app
+      com.datadoghq.tags.version: 1.0.0
+    environment:
+      DD_AGENT_HOST: datadog-agent
+      DD_TRACE_DEBUG: true
+      DD_ENV: test
+      DD_SERVICE: mux-sarama-app
+      DD_VERSION: 1.0.0
+    ports:
+      - 8000:8000
+  consumer:
+    build: ./mux-sarama-consumer
+    container_name: consumer
+    labels:
+      com.datadoghq.tags.env: test
+      com.datadoghq.tags.service: mux-sarama-app
+      com.datadoghq.tags.version: 1.0.0
+    environment:
+      DD_AGENT_HOST: datadog-agent
+      DD_TRACE_DEBUG: true
+      DD_ENV: test
+      DD_SERVICE: mux-sarama-app
+      DD_VERSION: 1.0.0
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: datadog
+      DB_PASSWORD: datadog
+      DB_NAME: mux-sarama-app-db
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.0.1
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+  broker:
+    image: confluentinc/cp-kafka:7.0.1
+    container_name: broker
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://broker:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+  db:
+    container_name: db
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: datadog
+      POSTGRES_PASSWORD: datadog
+      POSTGRES_DB: mux-sarama-app-db
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+  datadog-agent:
+    image: gcr.io/datadoghq/agent:7
+    container_name: datadog-agent
+    env_file:
+      - ~/sandbox.docker.env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
+    environment:
+      DD_APM_ENABLED: "true"
+      DD_APM_NON_LOCAL_TRAFFIC: "true"
+      DD_DOGSTATSD_NON_LOCAL_TRAFFIC: "true"
+      DD_LOGS_ENABLED: "true"
+      DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: "true"
+      DD_CONTAINER_EXCLUDE: name:datadog-agent
+      DD_ENV: test
